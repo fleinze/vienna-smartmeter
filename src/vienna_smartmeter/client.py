@@ -15,6 +15,7 @@ class Smartmeter:
     """Smartmeter client."""
 
     API_URL_WSTW = "https://api.wstw.at/gateway/WN_SMART_METER_PORTAL_API_B2C/1.0/"
+    API_URL_WSTW_B2B = "https://api.wstw.at/gateway/WN_SMART_METER_PORTAL_API_B2B/1.0/"
     API_URL_WN = "https://service.wienernetze.at/rest/smp/1.0/"
     API_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
     AUTH_URL = "https://log.wien/auth/realms/logwien/protocol/openid-connect/"  # noqa
@@ -100,6 +101,42 @@ class Smartmeter:
         headers = {
             "Authorization": f"Bearer {self._access_token}",
             "X-Gateway-APIKey": "afb0be74-6455-44f5-a34d-6994223020ba",
+            "Accept": "application/json",
+        }
+
+        if data:
+            logger.debug("DATA: {}", data)
+            headers["Content-Type"] = "application/json"
+
+        response = self.session.request(method, url, headers=headers, json=data)
+
+        if return_response:
+            return response
+
+        return response.json()
+
+    def _call_api_wstw_b2b(
+        self,
+        endpoint,
+        base_url=None,
+        method="GET",
+        data=None,
+        query=None,
+        return_response=False,
+    ):
+        if base_url is None:
+            base_url = self.API_URL_WSTW_B2B
+        url = "{0}{1}".format(base_url, endpoint)
+
+        if query:
+            url += ("?" if "?" not in endpoint else "&") + parse.urlencode(query)
+
+        logger.debug("REQUEST: {}", url)
+
+        headers = {
+            "Authorization": f"Bearer {self._access_token}",
+            "X-Gateway-APIKey": "93d5d520-7cc8-11eb-99bc-ba811041b5f6",
+            "Accept": "application/json",
         }
 
         if data:
@@ -227,6 +264,34 @@ class Smartmeter:
             "dayViewResolution": "QUARTER-HOUR",
         }
         return self._call_api_wstw(endpoint, query=query)
+
+    def messwerte(self, date_from, date_to=None, zaehlpunkt=None,wertetyp="METER_READ"):
+        """Returns energy usage / Response from messwerte endpoint.
+
+        Args:
+            date_from (datetime.datetime): Starting date for energy usage request
+            date_to (datetime.datetime, optional): Ending date for energy usage request.
+                Defaults to datetime.datetime.now().
+            zaehlpunkt (str, optional): Id for desired smartmeter.
+                If None check for first meter in user profile.
+            wertetyp (str, optional): "DAY", "QUARTER_HOUR" or "METER_READ".
+                Defaults to "METER_READ"
+
+        Returns:
+            dict: JSON response of api call to
+                'zaehlpunkte/CUSTOMERID/ZAEHLPUNKT/messwerte'
+        """
+        if date_to is None:
+            date_to = datetime.now()
+        if zaehlpunkt is None:
+            zaehlpunkt = self._get_first_zaehlpunkt()
+        endpoint = "zaehlpunkte/{0}/{1}/messwerte".format(self._get_customerid(),zaehlpunkt)
+        query = {
+            "datumVon": date_from.strftime("%Y-%m-%d"),
+            "datumBis": date_to.strftime("%Y-%m-%d"),
+            "wertetyp": wertetyp,
+        }
+        return self._call_api_wstw_b2b(endpoint, query=query)
 
     def profil(self):
         """Returns profil of logged in user.
