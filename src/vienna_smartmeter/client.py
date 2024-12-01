@@ -16,9 +16,12 @@ class Smartmeter:
 
     API_URL_WSTW = "https://api.wstw.at/gateway/WN_SMART_METER_PORTAL_API_B2C/1.0/"
     API_URL_WSTW_B2B = "https://api.wstw.at/gateway/WN_SMART_METER_PORTAL_API_B2B/1.0/"
-    API_URL_WN = "https://service.wienernetze.at/rest/smp/1.0/"
+    API_URL_WN = "https://service.wienernetze.at/sm/api/"
     API_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
     AUTH_URL = "https://log.wien/auth/realms/logwien/protocol/openid-connect/"  # noqa
+    ORIGIN = "https://smartmeter-web.wienernetze.at"
+    REFERER = "https://smartmeter-web.wienernetze.at/"
+    USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.2151.72"
 
     def __init__(self, username, password, login=True):
         """Access the Smartmeter API.
@@ -33,13 +36,21 @@ class Smartmeter:
         self.session = requests.Session()
         self._access_token = None
 
+
+        self.session.headers.update({
+           "User-Agent": self.USER_AGENT,
+           "Referer": self.REFERER,
+           "Origin": self.ORIGIN,
+        })
+
+
         if login:
             self._login()
 
     def _login(self):
         args = {
             "client_id": "wn-smartmeter",
-            "redirect_uri": "https://www.wienernetze.at/wnapp/smapp/",
+            "redirect_uri": self.REFERER,
             "response_mode": "fragment",
             "response_type": "code",
             "scope": "openid",
@@ -48,6 +59,17 @@ class Smartmeter:
         }
         login_url = self.AUTH_URL + "auth?" + parse.urlencode(args)
         result = self.session.get(login_url)
+        tree = html.fromstring(result.content)
+        action = tree.xpath("(//form/@action)")[0]
+
+        result = self.session.post(
+           action,
+           data={
+              "username": self.username,
+              "login": ""
+           },
+           allow_redirects=False,
+        )
         tree = html.fromstring(result.content)
         action = tree.xpath("(//form/@action)")[0]
 
@@ -71,7 +93,7 @@ class Smartmeter:
                 "code": code,
                 "grant_type": "authorization_code",
                 "client_id": "wn-smartmeter",
-                "redirect_uri": "https://www.wienernetze.at/wnapp/smapp/",
+                "redirect_uri": self.REFERER,
             },
         )
 
@@ -299,7 +321,7 @@ class Smartmeter:
         Returns:
             dict: JSON response of api call to 'w/user/profile'
         """
-        return self._call_api_wn("w/user/profile")
+        return self._call_api_wn("user/profile")
 
     def ereignisse(self, date_from, date_to=None, zaehlpunkt=None):
         """Returns events between date_from and date_to of a specific smart meter.
@@ -323,7 +345,7 @@ class Smartmeter:
             "dateFrom": self._dt_string(date_from),
             "dateUntil": self._dt_string(date_to),
         }
-        return self._call_api_wn("w/user/ereignisse", query=query)
+        return self._call_api_wn("user/ereignisse", query=query)
 
     def create_ereignis(self, zaehlpunkt, name, date_from, date_to=None):
         """Creates new event.
@@ -352,8 +374,8 @@ class Smartmeter:
             "zaehlpunkt": zaehlpunkt,
         }
 
-        return self._call_api_wn("w/user/ereignis", data=data, method="POST")
+        return self._call_api_wn("user/ereignis", data=data, method="POST")
 
     def delete_ereignis(self, ereignis_id):
         """Deletes ereignis."""
-        return self._call_api_wn("w/user/ereignis/{}".format(ereignis_id), method="DELETE", return_response=True)
+        return self._call_api_wn("user/ereignis/{}".format(ereignis_id), method="DELETE", return_response=True)
