@@ -232,7 +232,7 @@ class Smartmeter:
         """Returns response from 'meterReadings' endpoint."""
         return self._call_api_wstw("zaehlpunkt/meterReadings")
 
-    def verbrauch_raw(self, date_from, date_to=None, zaehlpunkt=None):
+    def verbrauch_raw(self, date_from, date_to=None, zaehlpunkt=None, rolle=None):
         """Returns energy usage.
 
         Args:
@@ -246,19 +246,25 @@ class Smartmeter:
             dict: JSON response of api call to
                 'messdaten/CUSTOMERID/ZAEHLPUNKT/verbrauchRaw'
         """
+        if rolle is None:
+            rolle = "V001"
         if date_to is None:
             date_to = datetime.now()
         if zaehlpunkt is None:
             zaehlpunkt = self._get_first_zaehlpunkt()
-        endpoint = "messdaten/{0}/{1}/verbrauchRaw".format(self._get_customerid(),zaehlpunkt)
+        customerid = self._get_customerid()
+        endpoint = "/user/messwerte/bewegungsdaten"
         query = {
-            "dateFrom": self._dt_string(date_from),
-            "dateTo": self._dt_string(date_to),
-            "granularity": "DAY",
+            "geschaeftspartner": customerid,
+            "zaehlpunktnummer": zaehlpunkt,
+            "rolle": rolle,
+            "zeitpunktVon": self._dt_string(date_from),
+            "zeitpunktBis": self._dt_string(date_to),
+            "aggregat": "SUM_PER_DAY",
         }
-        return self._call_api_wstw(endpoint, query=query)
+        return self._call_api_wn(endpoint, query=query)
 
-    def verbrauch(self, date_from, date_to=None, zaehlpunkt=None):
+    def verbrauch(self, date_from, date_to=None, zaehlpunkt=None, rolle=None):
         """Returns energy usage.
 
         Args:
@@ -272,20 +278,23 @@ class Smartmeter:
             dict: JSON response of api call to
                 'messdaten/CUSTOMERID/ZAEHLPUNKT/verbrauch'
         """
+        if rolle is None:
+            rolle = "V002"
         if date_to is None:
             date_to = datetime.now()
         if zaehlpunkt is None:
             zaehlpunkt = self._get_first_zaehlpunkt()
-        endpoint = "messdaten/{0}/{1}/verbrauch".format(self._get_customerid(),zaehlpunkt)
+        customerid = self._get_customerid()
+        endpoint = "/user/messwerte/bewegungsdaten"
         query = {
-            "dateFrom": self._dt_string(date_from),
-            "dateTo": self._dt_string(date_to),
-            "period": "DAY",
-            "accumulate": False,
-            "offset": 0,
-            "dayViewResolution": "QUARTER-HOUR",
+            "geschaeftspartner": customerid,
+            "zaehlpunktnummer": zaehlpunkt,
+            "rolle": rolle,
+            "zeitpunktVon": self._dt_string(date_from),
+            "zeitpunktBis": self._dt_string(date_to),
+            "aggregat": "NONE",
         }
-        return self._call_api_wstw(endpoint, query=query)
+        return self._call_api_wn(endpoint, query=query)
 
     def messwerte(self, date_from, date_to=None, zaehlpunkt=None,wertetyp="METER_READ"):
         """Returns energy usage / Response from messwerte endpoint.
