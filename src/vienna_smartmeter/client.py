@@ -21,7 +21,7 @@ class Smartmeter:
     AUTH_URL = "https://log.wien/auth/realms/logwien/protocol/openid-connect/"  # noqa
     ORIGIN = "https://smartmeter-web.wienernetze.at"
     REFERER = "https://smartmeter-web.wienernetze.at/"
-    USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.2151.72"
+#    USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.2903.70" #optional
 
     def __init__(self, username, password, login=True):
         """Access the Smartmeter API.
@@ -38,7 +38,7 @@ class Smartmeter:
 
 
         self.session.headers.update({
-           "User-Agent": self.USER_AGENT,
+#           "User-Agent": self.USER_AGENT, #optional
            "Referer": self.REFERER,
            "Origin": self.ORIGIN,
         })
@@ -233,7 +233,10 @@ class Smartmeter:
         return self._call_api_wstw("zaehlpunkt/meterReadings")
 
     def verbrauch_raw(self, date_from, date_to=None, zaehlpunkt=None, rolle=None):
-        """Returns energy usage.
+        """
+        Legacy, do not use for new implementations
+
+        Returns energy usage.
 
         Args:
             date_from (datetime): Start date for energy usage request
@@ -243,8 +246,7 @@ class Smartmeter:
                 If None check for first meter in user profile.
 
         Returns:
-            dict: JSON response of api call to
-                'messdaten/CUSTOMERID/ZAEHLPUNKT/verbrauchRaw'
+            dict: JSON response of api call
         """
         if rolle is None:
             rolle = "V001"
@@ -265,7 +267,10 @@ class Smartmeter:
         return self._call_api_wn(endpoint, query=query)
 
     def verbrauch(self, date_from, date_to=None, zaehlpunkt=None, rolle=None):
-        """Returns energy usage.
+        """
+        Legacy, do not use for new implementations
+
+        Returns energy usage.
 
         Args:
             date_from (datetime.datetime): Starting date for energy usage request
@@ -276,7 +281,6 @@ class Smartmeter:
 
         Returns:
             dict: JSON response of api call to
-                'messdaten/CUSTOMERID/ZAEHLPUNKT/verbrauch'
         """
         if rolle is None:
             rolle = "V002"
@@ -294,6 +298,45 @@ class Smartmeter:
             "zeitpunktBis": self._dt_string(date_to),
             "aggregat": "NONE",
         }
+        return self._call_api_wn(endpoint, query=query)
+
+    def bewegungsdaten(self, date_from, date_to=None, zaehlpunkt=None, rolle=None, aggregat=None):
+        """
+        Returns energy usage.
+
+        Args:
+            date_from (datetime.datetime): Starting date for energy usage request
+            date_to (datetime.datetime, optional): Ending date for energy usage request.
+                Defaults to datetime.datetime.now().
+            zaehlpunkt (str, optional): Id for desired smartmeter.
+                If None check for first meter in user profile.
+            rolle (str, optional):
+                'V001' for quarter hour (default)
+                'V002' for daily averages
+            aggregat (str, optional):
+                'NONE' or 'SUM_PER_DAY' are valid values
+
+        Returns:
+            dict: JSON response of api call to 
+            '/user/messwerte/bewegungsdaten'
+        """
+        if rolle is None:
+            rolle = "V001"
+        if date_to is None:
+            date_to = datetime.now()
+        if zaehlpunkt is None:
+            zaehlpunkt = self._get_first_zaehlpunkt()
+        customerid = self._get_customerid()
+        endpoint = "/user/messwerte/bewegungsdaten"
+        query = {
+            "geschaeftspartner": customerid,
+            "zaehlpunktnummer": zaehlpunkt,
+            "rolle": rolle,
+            "zeitpunktVon": self._dt_string(date_from),
+            "zeitpunktBis": self._dt_string(date_to),
+        }
+        if aggregat is not None:
+            query["aggregat"]=aggregat
         return self._call_api_wn(endpoint, query=query)
 
     def messwerte(self, date_from, date_to=None, zaehlpunkt=None,wertetyp="METER_READ"):
