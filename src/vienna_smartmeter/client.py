@@ -21,7 +21,7 @@ class Smartmeter:
     AUTH_URL = "https://log.wien/auth/realms/logwien/protocol/openid-connect/"  # noqa
     ORIGIN = "https://smartmeter-web.wienernetze.at"
     REFERER = "https://smartmeter-web.wienernetze.at/"
-    USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.2151.72"
+    USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.2903.70"
 
     def __init__(self, username, password, login=True):
         """Access the Smartmeter API.
