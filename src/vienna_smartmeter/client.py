@@ -310,10 +310,10 @@ def bewegungsdaten(self, date_from, date_to=None, zaehlpunkt=None, rolle=None, a
                 Defaults to datetime.datetime.now().
             zaehlpunkt (str, optional): Id for desired smartmeter.
                 If None check for first meter in user profile.
-            rolle
-                'V001' for quarter hour
+            rolle (str, optional):
+                'V001' for quarter hour (default)
                 'V002' for daily averages
-            aggregat
+            aggregat (str, optional):
                 'NONE' or 'SUM_PER_DAY' are valid values
 
         Returns:
