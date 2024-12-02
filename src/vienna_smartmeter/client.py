@@ -235,7 +235,7 @@ class Smartmeter:
     def verbrauch_raw(self, date_from, date_to=None, zaehlpunkt=None, rolle=None):
         """
         Legacy, do not use for new implementations
-        
+
         Returns energy usage.
 
         Args:
@@ -269,7 +269,7 @@ class Smartmeter:
     def verbrauch(self, date_from, date_to=None, zaehlpunkt=None, rolle=None):
         """
         Legacy, do not use for new implementations
-        
+
         Returns energy usage.
 
         Args:
@@ -300,7 +300,7 @@ class Smartmeter:
         }
         return self._call_api_wn(endpoint, query=query)
 
-def bewegungsdaten(self, date_from, date_to=None, zaehlpunkt=None, rolle=None, aggregat=None):
+    def bewegungsdaten(self, date_from, date_to=None, zaehlpunkt=None, rolle=None, aggregat=None):
         """
         Returns energy usage.
 
@@ -338,7 +338,7 @@ def bewegungsdaten(self, date_from, date_to=None, zaehlpunkt=None, rolle=None, a
         if aggregat is not None:
             query["aggregat"]=aggregat
         return self._call_api_wn(endpoint, query=query)
-    
+
     def messwerte(self, date_from, date_to=None, zaehlpunkt=None,wertetyp="METER_READ"):
         """Returns energy usage / Response from messwerte endpoint.
 
