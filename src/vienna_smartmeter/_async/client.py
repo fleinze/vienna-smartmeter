@@ -12,20 +12,27 @@ from lxml import html
 
 from ..errors import SmartmeterLoginError
 
+import base64
+import hashlib
+import os
+import re
+
 logger = logging.getLogger(__name__)
 
 TIMEOUT = 10
-
 
 class AsyncSmartmeter:
     """Async Smartmeter Client."""
 
     API_URL_WSTW = "https://api.wstw.at/gateway/WN_SMART_METER_PORTAL_API_B2C/1.0/"
-    API_URL_WN = "https://service.wienernetze.at/rest/smp/1.0/"
+    API_URL_WSTW_B2B = "https://api.wstw.at/gateway/WN_SMART_METER_PORTAL_API_B2B/1.0/"
+    API_URL_WN = "https://service.wienernetze.at/sm/api/"
     API_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
     AUTH_URL = "https://log.wien/auth/realms/logwien/protocol/openid-connect/"  # noqa
+    ORIGIN = "https://smartmeter-web.wienernetze.at"
+    REFERER = "https://smartmeter-web.wienernetze.at/"
 
-    def __init__(self, username, password, session=None, timeout=TIMEOUT):
+    def __init__(self, username, password, session=None, timeout=TIMEOUT, input_code_verifier=None):
         """Access the Smart Meter API asynchronously.
 
         Args:
@@ -33,6 +40,7 @@ class AsyncSmartmeter:
             password (str): Password used for API Login
             session (aiohttp.ClientSession): An optional session object
             timeout (int): Timeout for all session calls. Defaults to TIMEOUT.
+            input_code_verifier (str): An optional fixed code_verifier for creating a code_challenge
         """
         self._username = username
         self._password = password
@@ -40,37 +48,93 @@ class AsyncSmartmeter:
         self._timeout = timeout
         self._access_token = None
 
+        self._code_verifier = None
+        if input_code_verifier is not None:
+            if self.is_valid_code_verifier(input_code_verifier):
+                self._code_verifier = input_code_verifier
+
+        self._code_challenge = None
+
+    def generate_code_verifier(self):
+        """
+        generate a code verifier
+        """
+        return base64.urlsafe_b64encode(os.urandom(32)).decode('utf-8').rstrip('=')
+
+    def generate_code_challenge(self, code_verifier):
+        """
+        generate a code challenge from the code verifier
+        """
+        code_challenge = hashlib.sha256(code_verifier.encode('utf-8')).digest()
+        return base64.urlsafe_b64encode(code_challenge).decode('utf-8').rstrip('=')
+
+    def is_valid_code_verifier(self, code_verifier):
+        if not (43 <= len(code_verifier) <= 128):
+            return False
+
+        pattern = r'^[A-Za-z0-9\-._~]+$'
+        if not re.match(pattern, code_verifier):
+            return False
+
+        return True
+
     async def _get_login_action(self):
+        if not hasattr(self, '_code_verifier') or self._code_verifier is None:
+           #only generate if it does not exist 
+           self._code_verifier = self.generate_code_verifier()
+
+        #generate a code challenge from the code verifier to enhance security
+        self._code_challenge = self.generate_code_challenge(self._code_verifier)
+
         args = {
             "client_id": "wn-smartmeter",
-            "redirect_uri": "https://www.wienernetze.at/wnapp/smapp/",
+            "redirect_uri": self.REFERER,
             "response_mode": "fragment",
             "response_type": "code",
             "scope": "openid",
             "nonce": "",
             "prompt": "login",
+            "code_challenge": self._code_challenge,
+            "code_challenge_method": "S256"
         }
         login_url = self.AUTH_URL + "auth?" + parse.urlencode(args)
+        logging.debug(f"login_url: {login_url}")
         async with self._session.get(login_url) as response:
             tree = html.fromstring(await response.text())
             return tree.xpath("(//form/@action)")[0]
 
     async def _get_auth_code(self):
+        url = await self._get_login_action()
+        logging.debug(f"url: {url}")
 
-        action = await self._get_login_action()
-
-        async with self._session.request(
-            "POST",
-            action,
-            data={"username": self._username, "password": self._password},
+        async with self._session.post(
+            url,
+            data={
+                "username": self._username,
+                "login": " "
+            },
             allow_redirects=False,
+        ) as result:
+            if result.status != 200:
+                raise SmartmeterLoginError("Login action failed.")
+
+            tree = html.fromstring(await result.text())
+            action = tree.xpath("(//form/@action)")[0]
+
+        async with self._session.post(
+            action,
+            data={
+                "username": self._username,
+                "password": self._password
+           },
+            allow_redirects=False
         ) as resp:
             if "Location" not in resp.headers:
                 raise SmartmeterLoginError(
                     "Authentication failed. Check user credentials."
                 )
             auth_code = resp.headers["Location"].split("&code=", 1)[1]
-            return auth_code
+        return auth_code
 
     async def refresh_token(self):
         """Create a valid access token."""
@@ -81,7 +145,8 @@ class AsyncSmartmeter:
                 "code": await self._get_auth_code(),
                 "grant_type": "authorization_code",
                 "client_id": "wn-smartmeter",
-                "redirect_uri": "https://www.wienernetze.at/wnapp/smapp/",
+                "redirect_uri": self.REFERER,
+                "code_verifier": self._code_verifier
             },
         ) as response:
             if response.status != 200:
@@ -122,7 +187,7 @@ class AsyncSmartmeter:
             date_to = datetime.now()
         if zaehlpunkt is None:
             zaehlpunkt = self._get_first_zaehlpunkt()
-        endpoint = f"messdaten/{_get_customerid()}/{zaehlpunkt}/verbrauchRaw"
+        endpoint = f"messdaten/{self._get_customerid()}/{zaehlpunkt}/verbrauchRaw"
         query = {
             "dateFrom": self._dt_string(date_from),
             "dateTo": self._dt_string(date_to),
@@ -132,7 +197,7 @@ class AsyncSmartmeter:
 
     async def profil(self):
         """Get profil of logged in user."""
-        return await self._request("w/user/profile", base_url=self.API_URL_WN)
+        return await self._request("user/profile", base_url=self.API_URL_WN)
 
     async def zaehlpunkte(self):
         """Returns zaehlpunkte for currently logged in user."""

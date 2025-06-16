@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 from urllib import parse
 
-import requests
+import requests, base64, hashlib, os, re
 from lxml import html
 
 from .errors import SmartmeterLoginError
@@ -21,33 +21,71 @@ class Smartmeter:
     AUTH_URL = "https://log.wien/auth/realms/logwien/protocol/openid-connect/"  # noqa
     ORIGIN = "https://smartmeter-web.wienernetze.at"
     REFERER = "https://smartmeter-web.wienernetze.at/"
-#    USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.2903.70" #optional
+    USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.2903.70" #optional
 
-    def __init__(self, username, password, login=True):
+    def __init__(self, username, password, login=True, input_code_verifier=None):
         """Access the Smartmeter API.
 
         Args:
             username (str): Username used for API Login.
-            password (str): Username used for API Login.
+            password (str): Password used for API Login.
             login (bool, optional): If _login() should be called. Defaults to True.
+            input_code_verifier (str): An optional fixed code_verifier for creating a code_challenge
         """
         self.username = username
         self.password = password
         self.session = requests.Session()
         self._access_token = None
 
+        self._code_verifier = None
+        if input_code_verifier is not None:
+            if self.is_valid_code_verifier(input_code_verifier):
+                self._code_verifier = input_code_verifier
 
         self.session.headers.update({
-#           "User-Agent": self.USER_AGENT, #optional
+           "User-Agent": self.USER_AGENT, #optional
            "Referer": self.REFERER,
            "Origin": self.ORIGIN,
         })
 
-
         if login:
             self._login()
 
+
+    def generate_code_verifier(self):
+        """
+        generate a code verifier
+        """
+        return base64.urlsafe_b64encode(os.urandom(32)).decode('utf-8').rstrip('=')
+
+    def generate_code_challenge(self, code_verifier):
+        """
+        generate a code challenge from the code verifier
+        """
+        code_challenge = hashlib.sha256(code_verifier.encode('utf-8')).digest()
+        return base64.urlsafe_b64encode(code_challenge).decode('utf-8').rstrip('=')
+
+    def is_valid_code_verifier(self, code_verifier):
+        """
+        validate input
+        """
+        if not (43 <= len(code_verifier) <= 128):
+            return False
+
+        pattern = r'^[A-Za-z0-9\-._~]+$'
+        if not re.match(pattern, code_verifier):
+            return False
+
+        return True
+
     def _login(self):
+        if not hasattr(self, '_code_verifier') or self._code_verifier is None:
+            #only generate code_verifier if it does not exist 
+            self._code_verifier = self.generate_code_verifier()
+
+        #generate a code challenge from the code_verifier to enhance security
+        self._code_challenge = self.generate_code_challenge(self._code_verifier)
+
         args = {
             "client_id": "wn-smartmeter",
             "redirect_uri": self.REFERER,
@@ -56,11 +94,15 @@ class Smartmeter:
             "scope": "openid",
             "nonce": "",
             "prompt": "login",
+            "code_challenge": self._code_challenge,
+            "code_challenge_method": "S256",
         }
         login_url = self.AUTH_URL + "auth?" + parse.urlencode(args)
         result = self.session.get(login_url)
         tree = html.fromstring(result.content)
-        action = tree.xpath("(//form/@action)")[0]
+
+        forms = tree.xpath("(//form/@action)")
+        action = forms[0]
 
         result = self.session.post(
            action,
@@ -94,6 +136,7 @@ class Smartmeter:
                 "grant_type": "authorization_code",
                 "client_id": "wn-smartmeter",
                 "redirect_uri": self.REFERER,
+                "code_verifier": self._code_verifier,
             },
         )
 
