@@ -21,7 +21,7 @@ Changelog = "https://github.com/platysma/vienna-smartmeter/releases"
 [tool.poetry.dependencies]
 python = "^3.6.1"
 requests = "^2.24.0"
-lxml = "^4.6.3"
+lxml = "^5.0"
 aiohttp = { version = "^3.7.4", optional = true }
 async_timeout = { version = "^3.0.1", optional = true }
 importlib-metadata = "^4.6.4"
